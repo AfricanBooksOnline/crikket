@@ -4,6 +4,9 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   typedRoutes: true,
   images: {
+    // Droplet VPC DNS resolves *.digitaloceanspaces.com to a private IP.
+    // Next 16's image optimizer SSRF guard then returns 400 ("url" parameter is not allowed).
+    dangerouslyAllowLocalIP: true,
     remotePatterns: [
       {
         protocol: "https",

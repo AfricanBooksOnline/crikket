@@ -329,6 +329,7 @@ function MediaPreview({ report }: { report: BugReportListItem }) {
     return (
       <Image
         alt={report.title}
+        unoptimized
         className="object-cover transition-transform group-hover:scale-105"
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 20vw"
@@ -345,6 +346,7 @@ function MediaPreview({ report }: { report: BugReportListItem }) {
     return (
       <Image
         alt={report.title}
+        unoptimized
         className="object-cover transition-transform group-hover:scale-105"
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 20vw"
