@@ -1,10 +1,54 @@
+import { useRef } from "react"
+import { isDisplayCaptureAvailable } from "../../../media/capture-support"
 import { Button } from "../components/primitives/button"
 
 export function ChooserSection(props: {
   busy: boolean
+  onAttachImage: (file: File) => void
   onStartVideo: () => void
   onTakeScreenshot: () => void
 }): React.JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  // Phones, some browsers and blocked iframes can't capture the screen.
+  const canCapture = isDisplayCaptureAvailable()
+
+  const fileInput = (
+    <input
+      accept="image/*"
+      onChange={(event) => {
+        const file = event.target.files?.[0]
+        event.target.value = ""
+        if (file) {
+          props.onAttachImage(file)
+        }
+      }}
+      ref={fileInputRef}
+      style={{ display: "none" }}
+      type="file"
+    />
+  )
+  const openFilePicker = () => fileInputRef.current?.click()
+
+  if (!canCapture) {
+    return (
+      <section className="grid gap-4 p-5">
+        <p className="m-0 text-muted-foreground text-sm">
+          Screen capture isn't available here. Take a screenshot on your
+          device, then attach it.
+        </p>
+        <Button
+          className="w-full"
+          disabled={props.busy}
+          onClick={openFilePicker}
+          type="button"
+        >
+          Attach image
+        </Button>
+        {fileInput}
+      </section>
+    )
+  }
+
   return (
     <section className="grid gap-4 p-5">
       <p className="m-0 text-muted-foreground text-sm">
@@ -29,6 +73,16 @@ export function ChooserSection(props: {
           Take Screenshot
         </Button>
       </div>
+      <Button
+        className="w-full"
+        disabled={props.busy}
+        onClick={openFilePicker}
+        type="button"
+        variant="secondary"
+      >
+        Or attach an image
+      </Button>
+      {fileInput}
     </section>
   )
 }

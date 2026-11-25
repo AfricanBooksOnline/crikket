@@ -1,8 +1,15 @@
 import { Separator } from "@crikket/ui/components/ui/separator"
 import { cn } from "@crikket/ui/lib/utils"
-import { Globe, Info, MousePointerClick, Terminal } from "lucide-react"
+import {
+  Globe,
+  Info,
+  MessageSquare,
+  MousePointerClick,
+  Terminal,
+} from "lucide-react"
 import type { ReactNode } from "react"
 
+import { CommentsPanel } from "./comments-panel"
 import { NetworkRequestsPanel } from "./network-requests-panel"
 import { ReproductionStepsList } from "./reproduction-steps-list"
 import { TimelineList } from "./timeline-list"
@@ -14,7 +21,12 @@ import type {
   SharedBugReport,
 } from "./types"
 
-export type SidebarTab = "details" | "console" | "network" | "actions"
+export type SidebarTab =
+  | "details"
+  | "console"
+  | "network"
+  | "actions"
+  | "comments"
 
 interface TimelineSidebarState {
   entries: DebuggerTimelineEntry[]
@@ -46,20 +58,27 @@ interface BugReportSidebarProps {
   }
   network: NetworkSidebarState
   onEntrySelect: (entry: DebuggerTimelineEntry) => void
+  /** Refetch the report after a comment changed its status. */
+  onReportChanged: () => Promise<unknown> | undefined
 }
 
 export function BugReportSidebar({
   bugReportId,
   data,
-  activeTab,
+  activeTab: requestedTab,
   tabAction,
   onTabChange,
   timeline,
   network,
   onEntrySelect,
+  onReportChanged,
 }: BugReportSidebarProps) {
   const deviceInfo = data.deviceInfo as DeviceInfo | null
   const reporterName = data.reporter?.name?.trim()
+  // Comments are for organization members only (canEdit), never public viewers.
+  const showComments = data.canEdit
+  const activeTab =
+    requestedTab === "comments" && !showComments ? "details" : requestedTab
 
   return (
     <div className="z-20 flex h-full w-full flex-col bg-background shadow-xl md:relative md:top-0 md:border-l md:shadow-none">
@@ -89,6 +108,14 @@ export function BugReportSidebar({
           label="Network"
           onClick={() => onTabChange("network")}
         />
+        {showComments ? (
+          <TabButton
+            active={activeTab === "comments"}
+            icon={<MessageSquare className="h-3.5 w-3.5" />}
+            label="Comments"
+            onClick={() => onTabChange("comments")}
+          />
+        ) : null}
         {tabAction ? <div className="shrink-0">{tabAction}</div> : null}
       </div>
 
@@ -151,6 +178,14 @@ export function BugReportSidebar({
             icon={<Terminal className="h-3 w-3" />}
             onSelect={onEntrySelect}
             selectedId={timeline.console.selectedEntryId}
+          />
+        )}
+
+        {activeTab === "comments" && showComments && (
+          <CommentsPanel
+            bugReportId={bugReportId}
+            onStatusChanged={onReportChanged}
+            status={data.status}
           />
         )}
 

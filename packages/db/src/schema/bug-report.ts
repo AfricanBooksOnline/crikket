@@ -22,7 +22,7 @@ export const bugReport = pgTable(
     }),
     title: text("title"),
     description: text("description"),
-    status: text("status").default("open").notNull(), // open, in_progress, resolved, closed
+    status: text("status").default("open").notNull(), // open, in_progress, in_review, resolved, closed
     priority: text("priority").default("none").notNull(), // none, low, medium, high, critical
     tags: text("tags").array(),
     url: text("url"),
@@ -154,6 +154,34 @@ export const bugReportAction = pgTable(
   (table) => [index("bug_report_action_bugReportId_idx").on(table.bugReportId)]
 )
 
+export const bugReportComment = pgTable(
+  "bug_report_comment",
+  {
+    id: text("id").primaryKey(),
+    bugReportId: text("bug_report_id")
+      .notNull()
+      .references(() => bugReport.id, { onDelete: "cascade" }),
+    // Kept when the author leaves the organization; shown as "Former member".
+    authorId: text("author_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    // Status the comment moved the report to, if any (e.g. "in_review").
+    statusChange: text("status_change"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("bug_report_comment_bugReportId_createdAt_idx").on(
+      table.bugReportId,
+      table.createdAt
+    ),
+  ]
+)
+
 export const bugReportArtifactCleanup = pgTable(
   "bug_report_artifact_cleanup",
   {
@@ -247,7 +275,22 @@ export const bugReportRelations = relations(bugReport, ({ one, many }) => ({
   logs: many(bugReportLog),
   networkRequests: many(bugReportNetworkRequest),
   actions: many(bugReportAction),
+  comments: many(bugReportComment),
 }))
+
+export const bugReportCommentRelations = relations(
+  bugReportComment,
+  ({ one }) => ({
+    bugReport: one(bugReport, {
+      fields: [bugReportComment.bugReportId],
+      references: [bugReport.id],
+    }),
+    author: one(user, {
+      fields: [bugReportComment.authorId],
+      references: [user.id],
+    }),
+  })
+)
 
 export const bugReportLogRelations = relations(bugReportLog, ({ one }) => ({
   bugReport: one(bugReport, {

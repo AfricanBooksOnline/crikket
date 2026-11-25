@@ -28,6 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@crikket/ui/components/ui/sheet"
+import { Textarea } from "@crikket/ui/components/ui/textarea"
 import { useForm } from "@tanstack/react-form"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -38,6 +39,7 @@ import { client } from "@/utils/orpc"
 const statusOptions: Array<{ label: string; value: BugReportStatus }> = [
   { label: "Open", value: BUG_REPORT_STATUS_OPTIONS.open },
   { label: "In Progress", value: BUG_REPORT_STATUS_OPTIONS.inProgress },
+  { label: "In Review", value: BUG_REPORT_STATUS_OPTIONS.inReview },
   { label: "Resolved", value: BUG_REPORT_STATUS_OPTIONS.resolved },
   { label: "Closed", value: BUG_REPORT_STATUS_OPTIONS.closed },
 ]
@@ -90,6 +92,8 @@ interface EditBugReportSheetProps {
   report: {
     id: string
     title: string | null | undefined
+    /** Pass to let members edit the description; omit to hide the field. */
+    description?: string | null
     tags: string[]
     status: BugReportStatus
     priority: Priority
@@ -104,10 +108,12 @@ export function EditBugReportSheet({
   report,
 }: EditBugReportSheetProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const canEditDescription = report.description !== undefined
 
   const form = useForm({
     defaultValues: {
       title: report.title ?? "",
+      description: report.description ?? "",
       tagsInput: report.tags.join(", "),
       status: report.status,
       priority: report.priority,
@@ -123,6 +129,7 @@ export function EditBugReportSheet({
         await client.bugReport.update({
           id: report.id,
           title: value.title.trim(),
+          ...(canEditDescription ? { description: value.description } : {}),
           tags: parseTagInput(value.tagsInput),
           status: value.status,
           priority: value.priority,
@@ -144,6 +151,7 @@ export function EditBugReportSheet({
   const resetFormValues = () => {
     form.reset({
       title: report.title ?? "",
+      description: report.description ?? "",
       tagsInput: report.tags.join(", "),
       status: report.status,
       priority: report.priority,
@@ -160,11 +168,12 @@ export function EditBugReportSheet({
 
   return (
     <Sheet onOpenChange={handleOpenChange} open={open}>
-      <SheetContent className="w-full">
+      <SheetContent className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Edit bug report</SheetTitle>
           <SheetDescription>
-            Update report details, tags, priority, status, and privacy.
+            Update report details, description, tags, priority, status, and
+            privacy.
           </SheetDescription>
         </SheetHeader>
 
@@ -205,6 +214,39 @@ export function EditBugReportSheet({
                 )
               }}
             </form.Field>
+
+            {canEditDescription ? (
+              <form.Field name="description">
+                {(field) => {
+                  const isInvalid =
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+
+                  return (
+                    <Field data-invalid={isInvalid}>
+                      <FieldLabel htmlFor={field.name}>Description</FieldLabel>
+                      <Textarea
+                        aria-invalid={isInvalid}
+                        className="max-h-72"
+                        id={field.name}
+                        maxLength={3000}
+                        name={field.name}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                        placeholder="What happened, and what did you expect?"
+                        rows={5}
+                        value={field.state.value}
+                      />
+                      {isInvalid ? (
+                        <FieldError errors={field.state.meta.errors} />
+                      ) : null}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+            ) : null}
 
             <form.Field name="tagsInput">
               {(field) => {

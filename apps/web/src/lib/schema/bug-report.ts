@@ -40,6 +40,9 @@ export const editBugReportFormSchema = z.object({
     .trim()
     .min(1, "Name is required")
     .max(200, "Name must be 200 characters or fewer"),
+  description: z
+    .string()
+    .max(3000, "Description must be 3000 characters or fewer"),
   tagsInput: z.string().superRefine((value, ctx) => {
     const tags = parseTagInput(value)
     if (tags.length > MAX_TAGS) {

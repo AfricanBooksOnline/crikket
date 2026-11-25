@@ -1,4 +1,5 @@
 import { LazyDebuggerCollector } from "../debugger/lazy-debugger-collector"
+import { ATTACH_IMAGE_MAX_BYTES } from "../media/capture-support"
 import {
   captureScreenshot,
   startDisplayRecording,
@@ -79,6 +80,9 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
         if (!blob) {
           throw new Error("Screenshot capture failed.")
         }
+      },
+      onAttachImage: async (file) => {
+        await this.attachImage(file)
       },
       onStopRecording: async () => {
         const blob = await this.stopRecording()
@@ -201,6 +205,32 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     })
 
     return blob
+  }
+
+  /**
+   * Use an image the reporter picked from their device instead of a screen
+   * capture: for phones and browsers that can't capture (AfricanBooks fork).
+   */
+  async attachImage(file: Blob): Promise<Blob> {
+    this.getRuntimeConfig()
+    this.ensureBrowserContext()
+
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Please choose an image file (PNG, JPG, …).")
+    }
+
+    if (file.size > ATTACH_IMAGE_MAX_BYTES) {
+      throw new Error("That image is too large. Please choose one under 15 MB.")
+    }
+
+    await this.debuggerCollector.startScreenshotSession()
+    this.finalizeCapturedMedia({
+      blob: file,
+      captureType: "screenshot",
+      durationMs: null,
+    })
+
+    return file
   }
 
   async submit(

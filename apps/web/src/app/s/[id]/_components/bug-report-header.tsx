@@ -14,10 +14,12 @@ interface BugReportHeaderProps {
   editAction?: ReactNode
 }
 
-function formatStatusLabel(status: BugReportStatus): string {
+export function formatStatusLabel(status: BugReportStatus): string {
   switch (status) {
     case BUG_REPORT_STATUS_OPTIONS.inProgress:
       return "In Progress"
+    case BUG_REPORT_STATUS_OPTIONS.inReview:
+      return "In Review"
     case BUG_REPORT_STATUS_OPTIONS.resolved:
       return "Resolved"
     case BUG_REPORT_STATUS_OPTIONS.closed:

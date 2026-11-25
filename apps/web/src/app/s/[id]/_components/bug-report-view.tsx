@@ -52,6 +52,7 @@ const SIDEBAR_TABS = [
   "actions",
   "console",
   "network",
+  "comments",
 ] as const satisfies readonly SidebarTab[]
 const EMPTY_SELECTION: SelectedEntryIds = {
   action: null,
@@ -284,6 +285,7 @@ function renderBugReportLoadedView(input: {
           report={{
             id: input.data.id,
             title: input.data.title,
+            description: input.data.description,
             tags: input.data.tags,
             status: input.data.status,
             priority: input.data.priority,
@@ -594,6 +596,7 @@ export function BugReportView({ id }: BugReportViewProps) {
       highlightedEntryIds: highlightedNetworkEntryIds,
     },
     onEntrySelect: handleEntrySelect,
+    onReportChanged: refetch,
   } as const
 
   return renderBugReportLoadedView({

@@ -28,6 +28,12 @@ const bugReportUpdateInputSchema = z
   .object({
     id: z.string().min(1),
     title: optionalText(200),
+    // Plain string (not optionalText) so a description can be cleared to "".
+    description: z
+      .string()
+      .max(3000)
+      .transform((value) => value.trim())
+      .optional(),
     status: z.enum(statusValues).optional(),
     priority: z.enum(priorityValues).optional(),
     visibility: z.enum(visibilityValues).optional(),
@@ -36,6 +42,7 @@ const bugReportUpdateInputSchema = z
   .superRefine((value, ctx) => {
     if (
       value.title === undefined &&
+      value.description === undefined &&
       value.status === undefined &&
       value.priority === undefined &&
       value.visibility === undefined &&
@@ -72,6 +79,7 @@ const bugReportBulkUpdateInputSchema = z
 
 function buildUpdateValues(input: {
   title?: string
+  description?: string
   status?: (typeof statusValues)[number]
   priority?: Priority
   visibility?: (typeof visibilityValues)[number]
@@ -79,6 +87,7 @@ function buildUpdateValues(input: {
 }) {
   const values: {
     title?: string
+    description?: string | null
     status?: string
     priority?: string
     visibility?: string
@@ -87,6 +96,10 @@ function buildUpdateValues(input: {
 
   if (input.title !== undefined) {
     values.title = input.title
+  }
+
+  if (input.description !== undefined) {
+    values.description = input.description.length > 0 ? input.description : null
   }
 
   if (input.status !== undefined) {
@@ -126,6 +139,7 @@ export const updateBugReport = protectedProcedure
       .returning({
         id: bugReport.id,
         title: bugReport.title,
+        description: bugReport.description,
         status: bugReport.status,
         priority: bugReport.priority,
         visibility: bugReport.visibility,
@@ -140,6 +154,7 @@ export const updateBugReport = protectedProcedure
     return {
       id: report.id,
       title: report.title,
+      description: report.description,
       status: isStatus(report.status) ? report.status : statusValues[0],
       priority: priorityValues.includes(report.priority as Priority)
         ? (report.priority as Priority)

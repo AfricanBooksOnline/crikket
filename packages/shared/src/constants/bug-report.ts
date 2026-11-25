@@ -1,6 +1,7 @@
 export const BUG_REPORT_STATUS_OPTIONS = {
   open: "open",
   inProgress: "in_progress",
+  inReview: "in_review",
   resolved: "resolved",
   closed: "closed",
 } as const

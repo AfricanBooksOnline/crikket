@@ -1,4 +1,10 @@
 import {
+  addBugReportComment,
+  deleteBugReportComment,
+  editBugReportComment,
+  listBugReportComments,
+} from "@crikket/bug-reports/procedures/comments"
+import {
   deleteBugReport,
   deleteBugReportsBulk,
 } from "@crikket/bug-reports/procedures/delete-bug-reports"
@@ -42,4 +48,9 @@ export const bugReportRouter = {
   update: updateBugReport,
   updateBulk: updateBugReportsBulk,
   updateVisibility: updateBugReportVisibility,
+  // AfricanBooks fork: comment threads
+  listComments: listBugReportComments,
+  addComment: addBugReportComment,
+  editComment: editBugReportComment,
+  deleteComment: deleteBugReportComment,
 }

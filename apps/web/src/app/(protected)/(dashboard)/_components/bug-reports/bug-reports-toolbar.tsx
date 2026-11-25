@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@crikket/ui/components/ui/select"
 import {
+  Eye,
   Filter,
   Search,
   Shield,
@@ -181,6 +182,11 @@ export function BugReportsToolbar({
           icon={<TriangleAlert className="size-3.5" />}
           label="Open"
           value={stats?.open ?? 0}
+        />
+        <StatChip
+          icon={<Eye className="size-3.5" />}
+          label="In Review"
+          value={stats?.inReview ?? 0}
         />
         <StatChip
           icon={<Shield className="size-3.5" />}

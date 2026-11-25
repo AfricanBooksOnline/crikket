@@ -1,3 +1,9 @@
+import {
+  CAPTURE_BLOCKED_MESSAGE,
+  isPermissionsPolicyError,
+  supportsTabCapture,
+} from "./capture-support"
+
 interface CaptureDisplayMediaStreamOptions extends DisplayMediaStreamOptions {
   monitorTypeSurfaces?: "exclude" | "include"
   preferCurrentTab?: boolean
@@ -34,7 +40,7 @@ export async function requestDisplayStream(
   audio: boolean
 ): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error("This browser does not support screen capture.")
+    throw new Error(CAPTURE_BLOCKED_MESSAGE)
   }
 
   try {
@@ -42,13 +48,23 @@ export async function requestDisplayStream(
       createDisplayStreamOptions(audio)
     )
   } catch (error) {
+    if (isPermissionsPolicyError(error)) {
+      throw new Error(CAPTURE_BLOCKED_MESSAGE)
+    }
+
     if (!audio) {
       throw error
     }
 
-    return navigator.mediaDevices.getDisplayMedia(
-      createDisplayStreamOptions(false)
-    )
+    try {
+      return await navigator.mediaDevices.getDisplayMedia(
+        createDisplayStreamOptions(false)
+      )
+    } catch (retryError) {
+      throw isPermissionsPolicyError(retryError)
+        ? new Error(CAPTURE_BLOCKED_MESSAGE)
+        : retryError
+    }
   }
 }
 
@@ -56,7 +72,8 @@ export function assertBrowserTabSurface(stream: MediaStream): void {
   const track = stream.getVideoTracks()[0]
   const displaySurface = track?.getSettings().displaySurface
 
-  if (displaySurface === "browser") {
+  // Safari/Firefox can't share a single tab, so a window or screen is fine there.
+  if (displaySurface === "browser" || !supportsTabCapture()) {
     return
   }
 

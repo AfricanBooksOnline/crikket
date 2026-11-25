@@ -70,6 +70,7 @@ export interface BugReportDashboardStats {
   total: number
   open: number
   inProgress: number
+  inReview: number
   resolved: number
   closed: number
   untriaged: number
@@ -343,6 +344,7 @@ export const getBugReportDashboardStats = protectedProcedure.handler(
         total: count(),
         open: sql<number>`SUM(CASE WHEN ${bugReport.status} = 'open' THEN 1 ELSE 0 END)`,
         inProgress: sql<number>`SUM(CASE WHEN ${bugReport.status} = 'in_progress' THEN 1 ELSE 0 END)`,
+        inReview: sql<number>`SUM(CASE WHEN ${bugReport.status} = 'in_review' THEN 1 ELSE 0 END)`,
         resolved: sql<number>`SUM(CASE WHEN ${bugReport.status} = 'resolved' THEN 1 ELSE 0 END)`,
         closed: sql<number>`SUM(CASE WHEN ${bugReport.status} = 'closed' THEN 1 ELSE 0 END)`,
         untriaged: sql<number>`SUM(CASE WHEN ${bugReport.priority} = 'none' THEN 1 ELSE 0 END)`,
@@ -357,6 +359,7 @@ export const getBugReportDashboardStats = protectedProcedure.handler(
       total: normalizeInt(result?.total),
       open: normalizeInt(result?.open),
       inProgress: normalizeInt(result?.inProgress),
+      inReview: normalizeInt(result?.inReview),
       resolved: normalizeInt(result?.resolved),
       closed: normalizeInt(result?.closed),
       untriaged: normalizeInt(result?.untriaged),
