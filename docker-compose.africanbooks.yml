@@ -1,0 +1,10 @@
+# AfricanBooks fork: use our images instead of upstream's.
+# Built by .github/workflows/docker-publish.yml on pushes to africanbooks/main.
+# Add to COMPOSE_FILE in .env, after docker-compose.yml.
+services:
+  server:
+    image: ghcr.io/africanbooksonline/crikket-server:latest
+  migrate:
+    image: ghcr.io/africanbooksonline/crikket-server:latest
+  web:
+    image: ghcr.io/africanbooksonline/crikket-web:latest

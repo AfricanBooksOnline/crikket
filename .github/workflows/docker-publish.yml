@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - africanbooks/main
     tags:
       - "v*"
   pull_request:
