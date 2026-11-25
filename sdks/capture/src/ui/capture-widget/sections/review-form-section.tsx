@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { MAX_MEDIA_PER_REPORT } from "../../../constants"
 import type { CaptureSubmissionDraft } from "../../../types"
-import type { CaptureReviewSubmitOptions, CaptureUiState } from "../../types"
+import type {
+  CaptureReviewSubmitOptions,
+  CaptureUiHandlers,
+  CaptureUiState,
+} from "../../types"
 import { MediaPreview } from "../components/media-preview"
 import { Button } from "../components/primitives/button"
 import { Field, FieldError } from "../components/primitives/field"
@@ -20,6 +24,10 @@ interface ReviewFormSectionProps {
   formKey: string
   isSubmitting: boolean
   state: CaptureUiState
+  handlers: Pick<
+    CaptureUiHandlers,
+    "onAddMore" | "onSelectMedia" | "onRemoveMedia" | "onAnnotationsChange"
+  >
   onCancel: () => void
   onSubmit: (
     draft: CaptureSubmissionDraft,
@@ -31,35 +39,48 @@ export function ReviewFormSection({
   formKey,
   isSubmitting,
   state,
+  handlers,
   onCancel,
   onSubmit,
 }: ReviewFormSectionProps): React.JSX.Element {
-  const [annotations, setAnnotations] = useState<ScreenshotAnnotation[]>([])
-  const previousMediaObjectUrlRef = useRef(state.media?.objectUrl)
-
-  useEffect(() => {
-    if (previousMediaObjectUrlRef.current === state.media?.objectUrl) {
-      return
+  // Annotations live in the store, per screenshot, so they survive switching
+  // between attachments and adding new ones.
+  const annotations: ScreenshotAnnotation[] = state.media
+    ? (state.annotationsByUrl[state.media.objectUrl] ?? [])
+    : []
+  const setAnnotations = (next: ScreenshotAnnotation[]) => {
+    if (state.media) {
+      handlers.onAnnotationsChange(state.media.objectUrl, next)
     }
-
-    previousMediaObjectUrlRef.current = state.media?.objectUrl
-    setAnnotations([])
-  }, [state.media?.objectUrl])
+  }
+  const canAddMore = state.mediaItems.length < MAX_MEDIA_PER_REPORT
 
   const form = useReviewForm({
     initialDraft: state.reviewDraft,
     onSubmit: async (draft) => {
-      let submitOptions: CaptureReviewSubmitOptions | undefined
+      const submitOptions: CaptureReviewSubmitOptions = {}
+      const overrides: Record<string, Blob> = {}
 
-      if (state.media?.captureType === "screenshot" && annotations.length > 0) {
-        const screenshotBlobOverride = await createAnnotatedScreenshotBlob({
-          annotations,
-          imageUrl: state.media.objectUrl,
+      for (const [index, item] of state.mediaItems.entries()) {
+        const itemAnnotations = state.annotationsByUrl[item.objectUrl] ?? []
+        if (item.captureType !== "screenshot" || itemAnnotations.length === 0) {
+          continue
+        }
+        const annotated = await createAnnotatedScreenshotBlob({
+          annotations: itemAnnotations,
+          imageUrl: item.objectUrl,
         })
-
-        submitOptions = screenshotBlobOverride
-          ? { screenshotBlobOverride }
-          : undefined
+        if (!annotated) {
+          continue
+        }
+        if (index === 0) {
+          submitOptions.screenshotBlobOverride = annotated
+        } else {
+          overrides[item.objectUrl] = annotated
+        }
+      }
+      if (Object.keys(overrides).length > 0) {
+        submitOptions.screenshotBlobOverrides = overrides
       }
 
       onSubmit(draft, submitOptions)
@@ -82,6 +103,16 @@ export function ReviewFormSection({
             </p>
           </div>
         </div>
+
+        <MediaStrip
+          activeIndex={state.activeMediaIndex}
+          canAddMore={canAddMore}
+          disabled={state.busy || isSubmitting}
+          items={state.mediaItems}
+          onAdd={() => handlers.onAddMore(form.draft)}
+          onRemove={handlers.onRemoveMedia}
+          onSelect={handlers.onSelectMedia}
+        />
 
         <div className="min-h-0 flex-1 overflow-auto p-5">
           {state.media?.captureType === "screenshot" ? (
@@ -212,5 +243,77 @@ export function ReviewFormSection({
         </div>
       </div>
     </section>
+  )
+}
+
+function MediaStrip(props: {
+  items: CaptureUiState["mediaItems"]
+  activeIndex: number
+  canAddMore: boolean
+  disabled: boolean
+  onSelect: (index: number) => void
+  onRemove: (index: number) => void
+  onAdd: () => void
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto border-b px-5 py-3">
+      {props.items.map((item, index) => (
+        <div className="relative shrink-0" key={item.objectUrl}>
+          <button
+            aria-label={`Show attachment ${index + 1}`}
+            aria-pressed={index === props.activeIndex}
+            className={`block h-12 w-16 overflow-hidden rounded-md bg-black ${
+              index === props.activeIndex
+                ? "text-foreground"
+                : "opacity-60 hover:opacity-100"
+            }`}
+            onClick={() => props.onSelect(index)}
+            style={
+              index === props.activeIndex
+                ? { outline: "2px solid currentColor", outlineOffset: 2 }
+                : undefined
+            }
+            type="button"
+          >
+            {item.captureType === "screenshot" ? (
+              <img
+                alt=""
+                className="h-full w-full object-cover"
+                src={item.objectUrl}
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-[10px] text-white">
+                Video
+              </span>
+            )}
+          </button>
+          {props.items.length > 1 ? (
+            <button
+              aria-label={`Remove attachment ${index + 1}`}
+              className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-[11px] leading-none shadow-sm"
+              disabled={props.disabled}
+              onClick={() => props.onRemove(index)}
+              type="button"
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {props.canAddMore ? (
+        <Button
+          className="h-12 shrink-0 px-3"
+          disabled={props.disabled}
+          onClick={props.onAdd}
+          type="button"
+          variant="outline"
+        >
+          + Add
+        </Button>
+      ) : null}
+      <span className="ml-auto shrink-0 text-muted-foreground text-xs">
+        {props.items.length}/{MAX_MEDIA_PER_REPORT}
+      </span>
+    </div>
   )
 }

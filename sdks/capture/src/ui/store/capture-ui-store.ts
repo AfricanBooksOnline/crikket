@@ -36,7 +36,29 @@ export function createCaptureUiStore(): CaptureUiStore {
     media: CapturedMedia
     warnings: string[]
     summary: CaptureDebuggerSummary
+    mediaItems?: CapturedMedia[]
+    preserveDraft?: boolean
   }) => {
+    const mediaItems = input.mediaItems ?? [input.media]
+    const activeMediaIndex = Math.max(0, mediaItems.indexOf(input.media))
+
+    if (input.preserveDraft) {
+      // Back from adding another attachment: keep the form and annotations.
+      patchState({
+        overlayOpen: true,
+        recordingDockOpen: false,
+        recordingStartedAt: null,
+        view: "review",
+        errorMessage: null,
+        busy: false,
+        media: input.media,
+        mediaItems,
+        activeMediaIndex,
+        addingMore: false,
+      })
+      return
+    }
+
     patchState({
       overlayOpen: true,
       recordingDockOpen: false,
@@ -45,6 +67,10 @@ export function createCaptureUiStore(): CaptureUiStore {
       errorMessage: null,
       busy: false,
       media: input.media,
+      mediaItems,
+      activeMediaIndex,
+      addingMore: false,
+      annotationsByUrl: {},
       warnings: [...input.warnings],
       summary: input.summary,
       shareUrl: "",
@@ -68,7 +94,7 @@ export function createCaptureUiStore(): CaptureUiStore {
       }
     },
     patchState,
-    openChooser: () => {
+    openChooser: (options) => {
       patchState({
         overlayOpen: true,
         recordingDockOpen: false,
@@ -76,6 +102,7 @@ export function createCaptureUiStore(): CaptureUiStore {
         view: "chooser",
         errorMessage: null,
         busy: false,
+        addingMore: options?.addingMore ?? false,
       })
     },
     close: () => {
@@ -145,6 +172,10 @@ function createInitialState(): CaptureUiState {
     warnings: [],
     summary: { ...DEFAULT_SUMMARY },
     media: null,
+    mediaItems: [],
+    activeMediaIndex: 0,
+    addingMore: false,
+    annotationsByUrl: {},
     shareUrl: "",
     copyLabel: "Copy Link",
     reviewDraft: {

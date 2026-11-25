@@ -20,6 +20,10 @@ import { toast } from "sonner"
 import { EditBugReportSheet } from "@/components/bug-reports/edit-bug-report-sheet"
 import { client, orpc } from "@/utils/orpc"
 
+import {
+  AttachmentSwitcher,
+  withSelectedAttachment,
+} from "./attachment-switcher"
 import { BugReportCanvas } from "./bug-report-canvas"
 import { BugReportHeader } from "./bug-report-header"
 import { BugReportSidebar, type SidebarTab } from "./bug-report-sidebar"
@@ -257,7 +261,24 @@ function renderBugReportLoadedView(input: {
   sidebarProps: React.ComponentProps<typeof BugReportSidebar>
   desktopVideoRef: React.RefObject<HTMLVideoElement | null>
   mobileVideoRef: React.RefObject<HTMLVideoElement | null>
+  selectedAttachmentIndex: number
+  onSelectAttachment: (index: number) => void
 }) {
+  // The debugger timeline is synced to attachment 1 only; other attachments
+  // render without the playback hooks so they can't move the timeline.
+  const isPrimaryAttachment = input.selectedAttachmentIndex === 0
+  const canvasData = withSelectedAttachment(
+    input.data,
+    input.selectedAttachmentIndex
+  )
+  const switcher = (
+    <AttachmentSwitcher
+      attachments={input.data.attachments}
+      onSelect={input.onSelectAttachment}
+      selectedIndex={input.selectedAttachmentIndex}
+    />
+  )
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <BugReportHeader
@@ -311,12 +332,16 @@ function renderBugReportLoadedView(input: {
             orientation="horizontal"
           >
             <ResizablePanel minSize={CANVAS_MIN_WIDTH}>
-              <div className="flex h-full">
+              <div className="flex h-full flex-col">
                 <BugReportCanvas
-                  data={input.data}
-                  onTimeUpdate={input.onTimeUpdate}
-                  ref={input.desktopVideoRef}
+                  data={canvasData}
+                  key={`desktop-${input.selectedAttachmentIndex}`}
+                  onTimeUpdate={
+                    isPrimaryAttachment ? input.onTimeUpdate : undefined
+                  }
+                  ref={isPrimaryAttachment ? input.desktopVideoRef : undefined}
                 />
+                {switcher}
               </div>
             </ResizablePanel>
             <ResizableHandle withHandle />
@@ -336,10 +361,14 @@ function renderBugReportLoadedView(input: {
             <div className="shrink-0 border-b">
               <BugReportCanvas
                 compact
-                data={input.data}
-                onTimeUpdate={input.onTimeUpdate}
-                ref={input.mobileVideoRef}
+                data={canvasData}
+                key={`mobile-${input.selectedAttachmentIndex}`}
+                onTimeUpdate={
+                  isPrimaryAttachment ? input.onTimeUpdate : undefined
+                }
+                ref={isPrimaryAttachment ? input.mobileVideoRef : undefined}
               />
+              {switcher}
             </div>
           )}
           <div className="min-h-0 flex-1">
@@ -435,6 +464,7 @@ export function BugReportView({ id }: BugReportViewProps) {
   const [playbackOffsetMs, setPlaybackOffsetMs] = useState(0)
   const [isMobileVideoHidden, setIsMobileVideoHidden] = useState(false)
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false)
+  const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState(0)
   const [selectedEntryIds, setSelectedEntryIds] =
     useState<SelectedEntryIds>(EMPTY_SELECTION)
   const retryIngestionMutation = useMutation({
@@ -609,6 +639,8 @@ export function BugReportView({ id }: BugReportViewProps) {
     onRetryDebuggerIngestion: () => retryIngestionMutation.mutate(),
     onTimeUpdate: setPlaybackOffsetMs,
     onToggleEditSheet: setIsEditSheetOpen,
+    selectedAttachmentIndex,
+    onSelectAttachment: setSelectedAttachmentIndex,
     onToggleMobileVideoVisibility: () => {
       setIsMobileVideoHidden((current) => !current)
     },

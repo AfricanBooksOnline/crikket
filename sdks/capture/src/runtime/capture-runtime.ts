@@ -1,3 +1,4 @@
+import { MAX_MEDIA_PER_REPORT } from "../constants"
 import { LazyDebuggerCollector } from "../debugger/lazy-debugger-collector"
 import { ATTACH_IMAGE_MAX_BYTES } from "../media/capture-support"
 import {
@@ -32,6 +33,10 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
   private activeRecording: RecordingController | null = null
   private currentMedia: CapturedMedia | null = null
   private currentReview: ReviewSnapshot | null = null
+  /** Attachments 2..5 (AfricanBooks fork). */
+  private extraMedia: CapturedMedia[] = []
+  /** Next capture is an extra attachment: keep the debugger session from the first. */
+  private addingMore = false
 
   init(options: CaptureInitOptions): CaptureRuntimeController {
     const config: CaptureRuntimeConfig = {
@@ -84,6 +89,20 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       onAttachImage: async (file) => {
         await this.attachImage(file)
       },
+      onBeginAddMore: () => {
+        if (
+          this.currentMedia &&
+          this.getAllMedia().length < MAX_MEDIA_PER_REPORT
+        ) {
+          this.addingMore = true
+        }
+      },
+      onCancelAddMore: () => {
+        this.addingMore = false
+      },
+      onRemoveMedia: (index) => {
+        this.removeMedia(index)
+      },
       onStopRecording: async () => {
         const blob = await this.stopRecording()
         if (!blob) {
@@ -134,12 +153,17 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.getRuntimeConfig()
     this.ensureBrowserContext()
     this.abortActiveRecording()
-    await this.debuggerCollector.startRecordingSession()
+    const isExtra = this.addingMore
+    if (!isExtra) {
+      await this.debuggerCollector.startRecordingSession()
+    }
 
     try {
       await this.hideUiForCapture()
       const controller = await startDisplayRecording()
-      this.debuggerCollector.markRecordingStarted(controller.startedAt)
+      if (!isExtra) {
+        this.debuggerCollector.markRecordingStarted(controller.startedAt)
+      }
       this.activeRecording = controller
       controller.finished
         .then(async (result) => {
@@ -161,7 +185,9 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       }
     } catch (error) {
       this.setUiHidden(false)
-      this.debuggerCollector.clearSession()
+      if (!isExtra) {
+        this.debuggerCollector.clearSession()
+      }
       throw error
     }
   }
@@ -187,7 +213,9 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
   async takeScreenshot(): Promise<Blob | null> {
     this.getRuntimeConfig()
     this.ensureBrowserContext()
-    await this.debuggerCollector.startScreenshotSession()
+    if (!this.addingMore) {
+      await this.debuggerCollector.startScreenshotSession()
+    }
 
     let blob: Blob
     try {
@@ -195,7 +223,9 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       blob = await captureScreenshot()
     } catch (error) {
       this.setUiHidden(false)
-      this.debuggerCollector.clearSession()
+      if (!this.addingMore) {
+        this.debuggerCollector.clearSession()
+      }
       throw error
     }
     await this.finalizeCapturedMedia({
@@ -223,7 +253,9 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       throw new Error("That image is too large. Please choose one under 15 MB.")
     }
 
-    await this.debuggerCollector.startScreenshotSession()
+    if (!this.addingMore) {
+      await this.debuggerCollector.startScreenshotSession()
+    }
     this.finalizeCapturedMedia({
       blob: file,
       captureType: "screenshot",
@@ -253,10 +285,19 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
             blob: options.screenshotBlobOverride,
           }
         : this.currentMedia
+    const extraMedia = this.extraMedia.map((item) => ({
+      blob:
+        item.captureType === "screenshot"
+          ? (options?.screenshotBlobOverrides?.[item.objectUrl] ?? item.blob)
+          : item.blob,
+      captureType: item.captureType,
+      durationMs: item.durationMs,
+    }))
     const result = await submitCapturedReport({
       config,
       draft,
       media,
+      extraMedia,
       review: this.currentReview,
       submitTransport: this.submitTransport,
     })
@@ -272,6 +313,11 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.abortActiveRecording()
     this.setUiHidden(false)
     this.clearMedia()
+    for (const item of this.extraMedia) {
+      URL.revokeObjectURL(item.objectUrl)
+    }
+    this.extraMedia = []
+    this.addingMore = false
     this.currentReview = null
     this.debuggerCollector.clearSession()
   }
@@ -309,6 +355,25 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
   }): void {
     this.setUiHidden(false)
 
+    if (this.addingMore && this.currentMedia && this.currentReview) {
+      this.addingMore = false
+      const media: CapturedMedia = {
+        blob: input.blob,
+        captureType: input.captureType,
+        durationMs: input.durationMs,
+        objectUrl: URL.createObjectURL(input.blob),
+      }
+      this.extraMedia.push(media)
+      this.mountedUi?.store.showReview({
+        media,
+        mediaItems: this.getAllMedia(),
+        warnings: this.currentReview.warnings,
+        summary: this.currentReview.debuggerSummary,
+        preserveDraft: true,
+      })
+      return
+    }
+
     const review = this.debuggerCollector.finalizeSession()
     const media = this.setMedia(input)
 
@@ -323,6 +388,45 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       summary: review.debuggerSummary,
     })
     this.prefillTitle()
+  }
+
+  private getAllMedia(): CapturedMedia[] {
+    return this.currentMedia ? [this.currentMedia, ...this.extraMedia] : []
+  }
+
+  /** Drop one attachment; removing the first promotes the next one. */
+  private removeMedia(index: number): void {
+    const all = this.getAllMedia()
+    const removed = all[index]
+    if (!removed) {
+      return
+    }
+
+    URL.revokeObjectURL(removed.objectUrl)
+    const remaining = all.filter((_, i) => i !== index)
+    this.currentMedia = remaining[0] ?? null
+    this.extraMedia = remaining.slice(1)
+
+    const store = this.mountedUi?.store
+    if (!store) {
+      return
+    }
+
+    if (!this.currentMedia) {
+      this.reset()
+      store.openChooser()
+      return
+    }
+
+    const state = store.getSnapshot()
+    const nextIndex = Math.min(index, remaining.length - 1)
+    store.showReview({
+      media: remaining[nextIndex] ?? this.currentMedia,
+      mediaItems: remaining,
+      warnings: state.warnings,
+      summary: state.summary,
+      preserveDraft: true,
+    })
   }
 
   private abortActiveRecording(): void {

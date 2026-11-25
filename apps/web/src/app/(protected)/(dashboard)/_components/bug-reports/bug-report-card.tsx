@@ -240,6 +240,9 @@ export function BugReportCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <Chip>{formatStatusLabel(report.status)}</Chip>
             <Chip>{formatPriorityLabel(report.priority)}</Chip>
+            {report.attachmentCount > 1 ? (
+              <Chip>{report.attachmentCount} attachments</Chip>
+            ) : null}
             {report.submissionStatus !==
             BUG_REPORT_SUBMISSION_STATUS_OPTIONS.ready ? (
               <Chip>
@@ -329,11 +332,11 @@ function MediaPreview({ report }: { report: BugReportListItem }) {
     return (
       <Image
         alt={report.title}
-        unoptimized
         className="object-cover transition-transform group-hover:scale-105"
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 20vw"
         src={report.thumbnail}
+        unoptimized
       />
     )
   }
@@ -346,11 +349,11 @@ function MediaPreview({ report }: { report: BugReportListItem }) {
     return (
       <Image
         alt={report.title}
-        unoptimized
         className="object-cover transition-transform group-hover:scale-105"
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 20vw"
         src={report.attachmentUrl}
+        unoptimized
       />
     )
   }

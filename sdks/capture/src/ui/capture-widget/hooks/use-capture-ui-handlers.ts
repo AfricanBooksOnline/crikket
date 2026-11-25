@@ -54,7 +54,10 @@ export function useCaptureUiHandlers(
   }
 
   const showCaptureError = (error: unknown) => {
-    input.store.openChooser()
+    // Stay in "add another" mode so earlier attachments aren't lost.
+    input.store.openChooser({
+      addingMore: input.store.getSnapshot().addingMore,
+    })
     input.store.showError(toUserError(error))
   }
 
@@ -94,6 +97,46 @@ export function useCaptureUiHandlers(
           } catch (error) {
             showCaptureError(error)
           }
+        })
+      },
+      onAddMore: (draft) => {
+        input.store.patchState({ reviewDraft: draft })
+        input.callbacks.onBeginAddMore()
+        input.store.openChooser({ addingMore: true })
+      },
+      onBackToReview: () => {
+        input.callbacks.onCancelAddMore()
+        const state = input.store.getSnapshot()
+        const media = state.mediaItems[state.activeMediaIndex]
+        if (!media) {
+          input.store.openChooser()
+          return
+        }
+        input.store.showReview({
+          media,
+          mediaItems: state.mediaItems,
+          warnings: state.warnings,
+          summary: state.summary,
+          preserveDraft: true,
+        })
+      },
+      onSelectMedia: (index) => {
+        const state = input.store.getSnapshot()
+        const media = state.mediaItems[index]
+        if (media) {
+          input.store.patchState({ media, activeMediaIndex: index })
+        }
+      },
+      onRemoveMedia: (index) => {
+        input.callbacks.onRemoveMedia(index)
+      },
+      onAnnotationsChange: (objectUrl, annotations) => {
+        const state = input.store.getSnapshot()
+        input.store.patchState({
+          annotationsByUrl: {
+            ...state.annotationsByUrl,
+            [objectUrl]: annotations,
+          },
         })
       },
       onStopRecording: () => {

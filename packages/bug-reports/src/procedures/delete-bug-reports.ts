@@ -1,5 +1,5 @@
 import { db } from "@crikket/db"
-import { bugReport } from "@crikket/db/schema/bug-report"
+import { bugReport, bugReportAttachment } from "@crikket/db/schema/bug-report"
 import { ORPCError } from "@orpc/server"
 import { and, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
@@ -28,6 +28,9 @@ export const deleteBugReport = protectedProcedure
       throw new ORPCError("NOT_FOUND", { message: "Bug report not found" })
     }
 
+    // Read extra attachment keys before the cascade delete removes the rows.
+    const extraKeys = await listExtraAttachmentKeys([report.id])
+
     await db
       .delete(bugReport)
       .where(
@@ -39,6 +42,9 @@ export const deleteBugReport = protectedProcedure
 
     if (report.captureKey) {
       await removeCaptureArtifactEventually(report.captureKey)
+    }
+    for (const objectKey of extraKeys) {
+      await removeCaptureArtifactEventually(objectKey)
     }
     if (report.debuggerKey) {
       await removeArtifactEventually({
@@ -88,6 +94,9 @@ export const deleteBugReportsBulk = protectedProcedure
     const captureKeys = reports
       .map((report) => report.captureKey)
       .filter((value): value is string => typeof value === "string")
+    captureKeys.push(
+      ...(await listExtraAttachmentKeys(reports.map((report) => report.id)))
+    )
 
     await db.delete(bugReport).where(
       and(
@@ -123,3 +132,18 @@ export const deleteBugReportsBulk = protectedProcedure
 
     return { deletedCount: reports.length }
   })
+
+async function listExtraAttachmentKeys(
+  bugReportIds: string[]
+): Promise<string[]> {
+  if (bugReportIds.length === 0) {
+    return []
+  }
+
+  const rows = await db
+    .select({ captureKey: bugReportAttachment.captureKey })
+    .from(bugReportAttachment)
+    .where(inArray(bugReportAttachment.bugReportId, bugReportIds))
+
+  return rows.map((row) => row.captureKey)
+}

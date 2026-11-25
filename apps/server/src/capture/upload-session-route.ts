@@ -90,6 +90,7 @@ export async function handleCaptureUploadSession(input: {
         bugReportId: result.bugReportId,
         captureUpload: result.captureUpload,
         debuggerUpload: result.debuggerUpload,
+        extraUploads: result.extraUploads,
         finalizeToken: finalizeAuthorization?.token,
         finalizeTokenExpiresAt: finalizeAuthorization?.expiresAt,
       },

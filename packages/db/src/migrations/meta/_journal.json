@@ -15,6 +15,13 @@
       "when": 1795586523993,
       "tag": "0001_bug_report_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795592928780,
+      "tag": "0002_bug_report_attachments",
+      "breakpoints": true
     }
   ]
 }

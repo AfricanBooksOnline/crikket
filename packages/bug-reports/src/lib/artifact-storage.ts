@@ -21,6 +21,20 @@ export function buildCaptureArtifactKey(input: {
   )
 }
 
+/** Key for attachment 2..5 (AfricanBooks fork), next to the primary capture. */
+export function buildExtraAttachmentArtifactKey(input: {
+  organizationId: string
+  bugReportId: string
+  position: number
+  captureType: "video" | "screenshot"
+}): string {
+  const extension = input.captureType === "video" ? "webm" : "png"
+  return (
+    buildBugReportArtifactBasePath(input) +
+    `attachment-${input.position}.${extension}`
+  )
+}
+
 export function buildThumbnailArtifactKey(input: {
   organizationId: string
   bugReportId: string

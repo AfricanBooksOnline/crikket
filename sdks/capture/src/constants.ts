@@ -5,3 +5,6 @@ export const MAX_RECENT_EVENT_AGE_MS = 60_000
 export const MAX_RECENT_EVENT_COUNT = 250
 export const SCREENSHOT_LOOKBACK_MS = 10_000
 export const TRAILING_SLASHES_REGEX = /\/+$/
+
+/** Attachments per report, including the first (AfricanBooks fork). */
+export const MAX_MEDIA_PER_REPORT = 5

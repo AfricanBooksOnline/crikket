@@ -63,8 +63,5 @@ export function supportsTabCapture(): boolean {
 }
 
 export function isPermissionsPolicyError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    POLICY_ERROR_PATTERN.test(error.message)
-  )
+  return error instanceof Error && POLICY_ERROR_PATTERN.test(error.message)
 }

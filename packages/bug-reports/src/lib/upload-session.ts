@@ -1,7 +1,9 @@
 import { db } from "@crikket/db"
 import {
   bugReport,
+  bugReportAttachment,
   bugReportUploadSession,
+  type PendingExtraAttachment,
 } from "@crikket/db/schema/bug-report"
 import {
   BUG_REPORT_DEBUGGER_INGESTION_STATUS_OPTIONS,
@@ -19,6 +21,7 @@ import { z } from "zod"
 import {
   buildCaptureArtifactKey,
   buildDebuggerArtifactKey,
+  buildExtraAttachmentArtifactKey,
 } from "./artifact-storage"
 import type { PersistBugReportDebuggerDataResult } from "./debugger"
 import {
@@ -53,6 +56,15 @@ const debuggerSummarySchema = z.object({
   networkRequests: z.number().int().nonnegative(),
 })
 
+/** Total attachments per report, including the first one (AfricanBooks fork). */
+export const MAX_ATTACHMENTS_PER_REPORT = 5
+
+const extraAttachmentInputSchema = z.object({
+  attachmentType: z.enum(["video", "screenshot"]),
+  contentType: z.string().max(MAX_CONTENT_TYPE_LENGTH).optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+})
+
 export const createBugReportUploadSessionInputSchema = z.object({
   title: optionalText(200),
   description: optionalText(3000),
@@ -72,6 +84,10 @@ export const createBugReportUploadSessionInputSchema = z.object({
   captureContentType: z.string().max(MAX_CONTENT_TYPE_LENGTH).optional(),
   hasDebuggerPayload: z.boolean().default(false),
   debuggerSummary: debuggerSummarySchema.optional(),
+  extraAttachments: z
+    .array(extraAttachmentInputSchema)
+    .max(MAX_ATTACHMENTS_PER_REPORT - 1)
+    .optional(),
 })
 
 export const finalizeBugReportUploadInputSchema = z.object({
@@ -82,6 +98,11 @@ export const finalizeBugReportUploadInputSchema = z.object({
   debuggerContentEncoding: z
     .string()
     .max(MAX_CONTENT_ENCODING_LENGTH)
+    .optional(),
+  // Sizes of attachments 2..5, in the order they were requested.
+  extraAttachmentSizes: z
+    .array(z.number().int().nonnegative())
+    .max(MAX_ATTACHMENTS_PER_REPORT - 1)
     .optional(),
 })
 
@@ -150,11 +171,29 @@ export async function createBugReportUploadSession(input: {
     method: "PUT"
     url: string
   }
+  extraUploads: Array<{
+    headers: Record<string, string>
+    key: string
+    method: "PUT"
+    url: string
+  }>
 }> {
   await assertCreateBugReportEntitlements({
     organizationId: input.organizationId,
     payload: buildEntitlementPayload(input.input),
   })
+  // Extra videos must pass the same plan checks as the first attachment.
+  for (const attachment of input.input.extraAttachments ?? []) {
+    if (attachment.attachmentType === "video") {
+      await assertCreateBugReportEntitlements({
+        organizationId: input.organizationId,
+        payload: {
+          attachmentType: "video",
+          metadata: { durationMs: attachment.durationMs },
+        },
+      })
+    }
+  }
 
   const storage = getStorageProvider()
   const normalizedMetadata = normalizeUploadMetadata(input.input.metadata)
@@ -176,6 +215,27 @@ export async function createBugReportUploadSession(input: {
           bugReportId,
         })
       : null
+    const extraAttachments: PendingExtraAttachment[] = (
+      input.input.extraAttachments ?? []
+    ).map((attachment, index) => {
+      const position = index + 1
+      return {
+        id: nanoid(16),
+        position,
+        attachmentType: attachment.attachmentType,
+        captureKey: buildExtraAttachmentArtifactKey({
+          organizationId: input.organizationId,
+          bugReportId,
+          position,
+          captureType: attachment.attachmentType,
+        }),
+        contentType: resolveCaptureContentType({
+          captureContentType: attachment.contentType,
+          captureType: attachment.attachmentType,
+        }),
+        durationMs: attachment.durationMs ?? null,
+      }
+    })
 
     await db.insert(bugReportUploadSession).values({
       id: bugReportId,
@@ -193,6 +253,7 @@ export async function createBugReportUploadSession(input: {
         captureType: input.input.attachmentType,
       }),
       debuggerKey,
+      extraAttachments: extraAttachments.length > 0 ? extraAttachments : null,
       visibility: input.input.visibility,
       deviceInfo: input.input.deviceInfo,
       metadata: {
@@ -217,12 +278,23 @@ export async function createBugReportUploadSession(input: {
         })
       : null
 
+    const extraUploads = await Promise.all(
+      extraAttachments.map(async (attachment) => ({
+        ...(await storage.createUploadUrl({
+          filename: attachment.captureKey,
+          contentType: attachment.contentType,
+        })),
+        key: attachment.captureKey,
+      }))
+    )
+
     return {
       bugReportId,
       captureKey,
       captureUpload,
       debuggerKey,
       debuggerUpload,
+      extraUploads,
     }
   })
 
@@ -239,6 +311,7 @@ export async function createBugReportUploadSession(input: {
             key: result.debuggerKey,
           }
         : undefined,
+    extraUploads: result.extraUploads,
   }
 }
 
@@ -318,6 +391,8 @@ export async function finalizeBugReportUpload(input: {
     }
   }
 
+  await assertExtraAttachmentsUploaded(uploadSession.extraAttachments)
+
   const captureContentType =
     input.input.captureContentType ??
     uploadSession.captureContentType ??
@@ -358,6 +433,12 @@ export async function finalizeBugReportUpload(input: {
       deviceInfo: uploadSession.deviceInfo,
       status: "open",
       metadata: uploadSession.metadata,
+    })
+
+    await insertExtraAttachments(tx, {
+      bugReportId: uploadSession.id,
+      attachments: uploadSession.extraAttachments,
+      sizes: input.input.extraAttachmentSizes,
     })
 
     await tx
@@ -441,4 +522,43 @@ function createEmptyDebuggerPersistence(
     },
     warnings,
   }
+}
+
+async function assertExtraAttachmentsUploaded(
+  attachments: PendingExtraAttachment[] | null
+): Promise<void> {
+  const storage = getStorageProvider()
+  for (const attachment of attachments ?? []) {
+    if (!(await storage.exists(attachment.captureKey))) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: `Attachment ${attachment.position + 1} upload has not completed yet.`,
+      })
+    }
+  }
+}
+
+async function insertExtraAttachments(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: {
+    bugReportId: string
+    attachments: PendingExtraAttachment[] | null
+    sizes: number[] | undefined
+  }
+): Promise<void> {
+  if (!input.attachments?.length) {
+    return
+  }
+
+  await tx.insert(bugReportAttachment).values(
+    input.attachments.map((attachment, index) => ({
+      id: attachment.id,
+      bugReportId: input.bugReportId,
+      position: attachment.position,
+      attachmentType: attachment.attachmentType,
+      captureKey: attachment.captureKey,
+      contentType: attachment.contentType,
+      sizeBytes: input.sizes?.[index] ?? null,
+      durationMs: attachment.durationMs,
+    }))
+  )
 }

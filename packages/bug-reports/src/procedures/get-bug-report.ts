@@ -1,11 +1,11 @@
 import { db } from "@crikket/db"
-import { bugReport } from "@crikket/db/schema/bug-report"
+import { bugReport, bugReportAttachment } from "@crikket/db/schema/bug-report"
 import {
   PRIORITY_OPTIONS,
   type Priority,
 } from "@crikket/shared/constants/priorities"
 import { ORPCError } from "@orpc/server"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { resolveCaptureUrl } from "../lib/storage"
 import {
   assertBugReportAccessById,
@@ -60,6 +60,41 @@ export const getBugReportById = o
       captureKey: report.captureKey,
     })
 
+    // AfricanBooks fork: the first attachment lives on the report row, the
+    // rest in bug_report_attachment. Return them all, in order.
+    const extraRows = await db
+      .select()
+      .from(bugReportAttachment)
+      .where(eq(bugReportAttachment.bugReportId, report.id))
+      .orderBy(asc(bugReportAttachment.position))
+    const extraAttachments = await Promise.all(
+      extraRows.map(async (row) => ({
+        id: row.id,
+        attachmentType: row.attachmentType === "video" ? "video" : "screenshot",
+        url: await resolveCaptureUrl({ captureKey: row.captureKey }),
+        durationMs: row.durationMs,
+      }))
+    )
+    const attachments = [
+      ...(report.attachmentType && attachmentUrl
+        ? [
+            {
+              id: "primary",
+              attachmentType:
+                report.attachmentType === "video" ? "video" : "screenshot",
+              url: attachmentUrl,
+              durationMs: null as number | null,
+            },
+          ]
+        : []),
+      ...extraAttachments,
+    ] as Array<{
+      id: string
+      attachmentType: "video" | "screenshot"
+      url: string | null
+      durationMs: number | null
+    }>
+
     return {
       id: report.id,
       title: report.title,
@@ -70,6 +105,7 @@ export const getBugReportById = o
       url: report.url,
       attachmentUrl,
       attachmentType: report.attachmentType,
+      attachments,
       submissionStatus: report.submissionStatus,
       debuggerIngestionStatus: report.debuggerIngestionStatus,
       debuggerIngestionError: report.debuggerIngestionError,

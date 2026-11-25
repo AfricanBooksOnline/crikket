@@ -14,6 +14,7 @@ export async function runStalePendingBugReportCleanupPass(options?: {
     columns: {
       captureKey: true,
       debuggerKey: true,
+      extraAttachments: true,
       id: true,
       organizationId: true,
     },
@@ -39,6 +40,13 @@ export async function runStalePendingBugReportCleanupPass(options?: {
       artifactKind: "capture",
       objectKey: captureObjectKey,
     })
+
+    for (const attachment of session.extraAttachments ?? []) {
+      await removeArtifactEventually({
+        artifactKind: "capture",
+        objectKey: attachment.captureKey,
+      })
+    }
 
     if (debuggerObjectKey) {
       await removeArtifactEventually({

@@ -4,6 +4,7 @@ import type {
   CapturedMedia,
   CaptureRuntimeConfig,
   CaptureSubmissionDraft,
+  CaptureSubmitRequest,
   CaptureSubmitResult,
   CaptureSubmitTransport,
   ReviewSnapshot,
@@ -14,6 +15,7 @@ export function submitCapturedReport(input: {
   config: CaptureRuntimeConfig
   draft: CaptureSubmissionDraft
   media: CapturedMedia
+  extraMedia?: NonNullable<CaptureSubmitRequest["report"]["extraMedia"]>
   review: ReviewSnapshot
   submitTransport?: CaptureSubmitTransport
 }): Promise<CaptureSubmitResult> {
@@ -34,6 +36,7 @@ export function submitCapturedReport(input: {
       debuggerPayload: input.review.debuggerPayload,
       debuggerSummary: input.review.debuggerSummary,
       media: input.media.blob,
+      extraMedia: input.extraMedia,
     },
   })
 }

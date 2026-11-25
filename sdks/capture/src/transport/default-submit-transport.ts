@@ -51,6 +51,19 @@ export async function defaultSubmitTransport(
     request.report.media
   )
 
+  const extraMedia = request.report.extraMedia ?? []
+  if (extraMedia.length > uploadSession.extraUploads.length) {
+    throw new Error(
+      "This Crikket server doesn't accept multiple attachments yet. Remove the extra ones and try again."
+    )
+  }
+  for (const [index, item] of extraMedia.entries()) {
+    const target = uploadSession.extraUploads[index]
+    if (target) {
+      await uploadArtifactToStorage(target, item.blob)
+    }
+  }
+
   const debuggerArtifact = await buildDebuggerArtifactForUpload(
     request.report.debuggerPayload
   )
@@ -83,6 +96,10 @@ export async function defaultSubmitTransport(
       captureSizeBytes: request.report.media.size,
       debuggerContentEncoding: debuggerArtifact?.contentEncoding,
       debuggerSizeBytes: debuggerArtifact?.blob.size,
+      extraAttachmentSizes:
+        extraMedia.length > 0
+          ? extraMedia.map((item) => item.blob.size)
+          : undefined,
     }),
     credentials: "omit",
     mode: "cors",
@@ -119,9 +136,20 @@ function buildUploadSessionRequest(request: CaptureSubmitRequest): {
   title: string
   url: string
   visibility: CaptureSubmitRequest["report"]["visibility"]
+  extraAttachments?: Array<{
+    attachmentType: CaptureSubmitRequest["report"]["captureType"]
+    contentType?: string
+    durationMs?: number
+  }>
 } {
-  if (request.report.media.size > 95 * 1024 * 1024) {
-    throw new Error(FILE_SIZE_LIMIT_MESSAGE)
+  const extraMedia = request.report.extraMedia ?? []
+  for (const media of [
+    request.report.media,
+    ...extraMedia.map((item) => item.blob),
+  ]) {
+    if (media.size > 95 * 1024 * 1024) {
+      throw new Error(FILE_SIZE_LIMIT_MESSAGE)
+    }
   }
 
   return {
@@ -140,6 +168,14 @@ function buildUploadSessionRequest(request: CaptureSubmitRequest): {
     captureContentType: request.report.media.type || undefined,
     debuggerSummary: request.report.debuggerSummary,
     hasDebuggerPayload: Boolean(request.report.debuggerPayload),
+    extraAttachments:
+      extraMedia.length > 0
+        ? extraMedia.map((item) => ({
+            attachmentType: item.captureType,
+            contentType: item.blob.type || undefined,
+            durationMs: item.durationMs ?? undefined,
+          }))
+        : undefined,
   }
 }
 
@@ -330,6 +366,7 @@ function parseUploadSessionPayload(payload: unknown): {
   bugReportId: string
   captureUpload: DirectUploadTarget
   debuggerUpload?: DirectUploadTarget
+  extraUploads: DirectUploadTarget[]
   finalizeToken?: string
 } {
   if (!isRecord(payload)) {
@@ -348,6 +385,9 @@ function parseUploadSessionPayload(payload: unknown): {
     debuggerUpload: payload.debuggerUpload
       ? parseUploadTarget(payload.debuggerUpload)
       : undefined,
+    extraUploads: Array.isArray(payload.extraUploads)
+      ? payload.extraUploads.map(parseUploadTarget)
+      : [],
     finalizeToken:
       typeof payload.finalizeToken === "string"
         ? payload.finalizeToken

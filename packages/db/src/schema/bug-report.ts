@@ -82,6 +82,9 @@ export const bugReportUploadSession = pgTable(
     captureKey: text("capture_key").notNull(),
     captureContentType: text("capture_content_type").notNull(),
     debuggerKey: text("debugger_key"),
+    // AfricanBooks fork: attachments 2..5, copied to bug_report_attachment on finalize.
+    extraAttachments:
+      jsonb("extra_attachments").$type<PendingExtraAttachment[]>(),
     metadata: jsonb("metadata"),
     deviceInfo: jsonb("device_info"),
     expiresAt: timestamp("expires_at").notNull(),
@@ -152,6 +155,44 @@ export const bugReportAction = pgTable(
     metadata: jsonb("metadata"), // coordinates, key pressed, etc.
   },
   (table) => [index("bug_report_action_bugReportId_idx").on(table.bugReportId)]
+)
+
+/** An extra attachment reserved on an upload session, before the report exists. */
+export interface PendingExtraAttachment {
+  id: string
+  position: number
+  attachmentType: "video" | "screenshot"
+  captureKey: string
+  contentType: string
+  durationMs: number | null
+}
+
+/**
+ * Attachments beyond the first (AfricanBooks fork). The first attachment stays
+ * on bug_report.capture_key so existing reports, thumbnails and older SDKs keep
+ * working unchanged; positions here start at 1.
+ */
+export const bugReportAttachment = pgTable(
+  "bug_report_attachment",
+  {
+    id: text("id").primaryKey(),
+    bugReportId: text("bug_report_id")
+      .notNull()
+      .references(() => bugReport.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    attachmentType: text("attachment_type").notNull(), // "video" | "screenshot"
+    captureKey: text("capture_key").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    durationMs: integer("duration_ms"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("bug_report_attachment_bugReportId_position_idx").on(
+      table.bugReportId,
+      table.position
+    ),
+  ]
 )
 
 export const bugReportComment = pgTable(
@@ -276,7 +317,18 @@ export const bugReportRelations = relations(bugReport, ({ one, many }) => ({
   networkRequests: many(bugReportNetworkRequest),
   actions: many(bugReportAction),
   comments: many(bugReportComment),
+  attachments: many(bugReportAttachment),
 }))
+
+export const bugReportAttachmentRelations = relations(
+  bugReportAttachment,
+  ({ one }) => ({
+    bugReport: one(bugReport, {
+      fields: [bugReportAttachment.bugReportId],
+      references: [bugReport.id],
+    }),
+  })
+)
 
 export const bugReportCommentRelations = relations(
   bugReportComment,

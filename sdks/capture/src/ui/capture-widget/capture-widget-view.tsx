@@ -22,6 +22,9 @@ export function CaptureWidgetView(props: {
       <ChooserSection
         busy={props.isBusy}
         onAttachImage={props.handlers.onAttachImage}
+        onBack={
+          props.state.addingMore ? props.handlers.onBackToReview : undefined
+        }
         onStartVideo={props.handlers.onStartVideo}
         onTakeScreenshot={props.handlers.onTakeScreenshot}
       />
@@ -33,6 +36,7 @@ export function CaptureWidgetView(props: {
       <Suspense fallback={<ReviewSectionFallback />}>
         <LazyReviewFormSection
           formKey={props.state.reviewFormKey}
+          handlers={props.handlers}
           isSubmitting={props.isSubmitPending}
           onCancel={props.handlers.onCancel}
           onSubmit={props.handlers.onSubmit}

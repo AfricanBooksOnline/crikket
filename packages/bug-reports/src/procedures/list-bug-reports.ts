@@ -50,6 +50,8 @@ export interface BugReportListItem {
   thumbnail: string | undefined
   attachmentUrl: string | undefined
   attachmentType: "video" | "screenshot" | undefined
+  /** Total attachments, including the first (AfricanBooks fork). */
+  attachmentCount: number
   uploader?: {
     name: string
     avatar: string | undefined
@@ -193,6 +195,7 @@ interface BugReportListRecord {
     name: string | null
     image: string | null
   } | null
+  attachments?: Array<{ id: string }>
 }
 
 async function mapBugReportListItem(
@@ -230,6 +233,7 @@ async function mapBugReportListItem(
         : undefined),
     attachmentUrl: attachmentUrl ?? undefined,
     attachmentType,
+    attachmentCount: countAttachments(report),
     visibility: isVisibility(report.visibility) ? report.visibility : "private",
     status: isStatus(report.status) ? report.status : "open",
     submissionStatus:
@@ -316,6 +320,7 @@ export const listBugReports = protectedProcedure
           offset,
           with: {
             reporter: true,
+            attachments: { columns: { id: true } },
           },
         }),
       ])
@@ -369,3 +374,7 @@ export const getBugReportDashboardStats = protectedProcedure.handler(
     }
   }
 )
+
+function countAttachments(report: BugReportListRecord): number {
+  return (report.captureKey ? 1 : 0) + (report.attachments?.length ?? 0)
+}

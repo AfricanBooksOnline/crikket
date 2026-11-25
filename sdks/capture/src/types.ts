@@ -124,6 +124,12 @@ export interface CaptureSubmitRequest {
     debuggerPayload?: BugReportDebuggerPayload
     debuggerSummary: CaptureDebuggerSummary
     media: Blob
+    /** Attachments 2..5 (AfricanBooks fork). */
+    extraMedia?: Array<{
+      blob: Blob
+      captureType: CaptureType
+      durationMs: number | null
+    }>
   }
 }
 

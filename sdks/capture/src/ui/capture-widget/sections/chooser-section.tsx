@@ -4,6 +4,8 @@ import { Button } from "../components/primitives/button"
 
 export function ChooserSection(props: {
   busy: boolean
+  /** Shown while adding another attachment: returns to the review screen. */
+  onBack?: () => void
   onAttachImage: (file: File) => void
   onStartVideo: () => void
   onTakeScreenshot: () => void
@@ -28,13 +30,24 @@ export function ChooserSection(props: {
     />
   )
   const openFilePicker = () => fileInputRef.current?.click()
+  const backButton = props.onBack ? (
+    <Button
+      className="w-full"
+      disabled={props.busy}
+      onClick={props.onBack}
+      type="button"
+      variant="outline"
+    >
+      Back to review
+    </Button>
+  ) : null
 
   if (!canCapture) {
     return (
       <section className="grid gap-4 p-5">
         <p className="m-0 text-muted-foreground text-sm">
-          Screen capture isn't available here. Take a screenshot on your
-          device, then attach it.
+          Screen capture isn't available here. Take a screenshot on your device,
+          then attach it.
         </p>
         <Button
           className="w-full"
@@ -44,6 +57,7 @@ export function ChooserSection(props: {
         >
           Attach image
         </Button>
+        {backButton}
         {fileInput}
       </section>
     )
@@ -52,7 +66,9 @@ export function ChooserSection(props: {
   return (
     <section className="grid gap-4 p-5">
       <p className="m-0 text-muted-foreground text-sm">
-        Choose how to capture the issue.
+        {props.onBack
+          ? "Add another screenshot, recording or image to this report."
+          : "Choose how to capture the issue."}
       </p>
       <div className="grid grid-cols-2 gap-2">
         <Button
@@ -82,6 +98,7 @@ export function ChooserSection(props: {
       >
         Or attach an image
       </Button>
+      {backButton}
       {fileInput}
     </section>
   )
